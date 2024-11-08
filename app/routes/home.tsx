@@ -1,136 +1,51 @@
-import { useRef, useState } from 'react';
-import {
-  type LoaderFunctionArgs,
-  Form,
-  useNavigation,
-  useSearchParams,
-  useSubmit,
-  useLoaderData,
-} from 'react-router';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
+import { ActionFunctionArgs } from 'node_modules/react-router/dist/lib/server-runtime/routeModules';
+import { useRef } from 'react';
+import { Form, useSubmit } from 'react-router';
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const url = new URL(request.url);
-
-  return [...url.searchParams.entries()];
+export async function action({ request }: ActionFunctionArgs) {
+  const body = await request.formData();
+  console.log(Object.fromEntries(body));
 }
 
 export default function Index() {
-  const searchParams = useLoaderData();
-  const [formRef, submitForm] = useFiltersSubmit();
-
   return (
     <div className="p-4">
-      <h1 className="my-8">Search params</h1>
-      <pre className="my-4">{JSON.stringify(searchParams, null, 2)}</pre>
-      <Form
-        ref={formRef}
-        onChange={() => {
-          console.log(
-            'cannot trigger at the top level -- form is not registering a change'
-          );
-        }}
-        className="flex flex-col gap-6"
-      >
-        <FilterProductStock submitForm={submitForm} />
+      <Form className="flex flex-col gap-6">
+        <FilterProductStock />
       </Form>
     </div>
   );
 }
 
-type FilterControlsProps = {
-  submitForm: ReturnType<typeof useFiltersSubmit>[1];
-};
-
-function FilterProductStock({ submitForm }: FilterControlsProps) {
-  const searchParams = usePendingSearchParams();
-  const available = searchParams.get('available') || undefined;
-
-  const [value, setValue] = useState(available || undefined);
+function FilterProductStock() {
+  let submit = useSubmit();
+  let ref = useRef<HTMLInputElement>(null);
 
   return (
     <ToggleGroup.Root
-      className="ToggleGroup"
       type="single"
-      defaultValue={available}
-      aria-label="Select availability"
       onValueChange={(newValue) => {
-        setValue(
-          newValue === 'true' || newValue === 'false' ? newValue : undefined
-        );
-        // If I submit here, the values of the hidden checkbox aren't in sync yet
-        submitForm();
+        if (ref.current) {
+          ref.current.value = newValue;
+          submit(ref.current.closest('form'), { method: 'post' });
+        }
       }}
     >
-      <ToggleGroup.Item value="true" asChild>
-        <button className="border p-2 data-[state=on]:bg-blue-500">
-          In Stock
-        </button>
-      </ToggleGroup.Item>
-      <input
-        type="checkbox"
-        name="available"
+      <input ref={ref} type="hidden" name="availability" />
+      <ToggleGroup.Item
         value="true"
-        checked={value === 'true'}
-        readOnly
-        className="sr-only"
-      />
-
-      <ToggleGroup.Item value="false" asChild>
-        <button className="border p-2 data-[state=on]:bg-blue-500">
-          In Stock
-        </button>
+        className="border p-2 data-[state=on]:bg-blue-500"
+      >
+        In Stock
       </ToggleGroup.Item>
-      <input
-        type="checkbox"
-        name="available"
+
+      <ToggleGroup.Item
         value="false"
-        checked={value === 'false'}
-        readOnly
-        className="sr-only"
-      />
+        className="border p-2 data-[state=on]:bg-blue-500"
+      >
+        Out of stock
+      </ToggleGroup.Item>
     </ToggleGroup.Root>
   );
-}
-
-export function useFiltersSubmit() {
-  const formRef = useRef<HTMLFormElement>(null);
-  const submit = useSubmit();
-
-  const submitForm = () => {
-    const formNode = formRef.current;
-    if (!formNode) {
-      throw new Error('formRef must be attached to a form element');
-    }
-
-    const formData = new FormData(formNode);
-
-    const keys = [...formData.keys()];
-
-    for (const key of keys) {
-      const value = formData.get(key);
-      if (value === '') {
-        formData.delete(key);
-      }
-    }
-
-    submit(formData, {
-      preventScrollReset: true,
-      replace: true,
-      method: 'get',
-    });
-  };
-
-  return [formRef, submitForm] as const;
-}
-
-function usePendingSearchParams() {
-  let [searchParams] = useSearchParams();
-
-  const navigation = useNavigation();
-  if (navigation.state === 'loading') {
-    searchParams = new URLSearchParams(navigation.location.search);
-  }
-
-  return searchParams;
 }
